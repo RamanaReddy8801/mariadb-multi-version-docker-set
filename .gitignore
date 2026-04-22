@@ -1,0 +1,16 @@
+# Environment files
+.env
+
+# Data directories (if using local folders instead of volumes)
+data/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

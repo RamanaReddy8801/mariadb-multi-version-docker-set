@@ -1,0 +1,84 @@
+# Environment variables are loaded from .env file
+# Copy .env.example to .env and customize the values
+
+services:
+  mariadb-10:
+    image: mariadb:10
+    container_name: mariadb-10
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MARIADB_10_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MARIADB_10_DATABASE}
+      MYSQL_USER: ${MARIADB_10_USER}
+      MYSQL_PASSWORD: ${MARIADB_10_PASSWORD}
+    ports:
+      - "${MARIADB_10_PORT}:3306"
+    volumes:
+      - mariadb_10_data:/var/lib/mysql
+      - ./init-scripts/v10:/docker-entrypoint-initdb.d
+      - ./mysql-config/performance-schema.cnf:/etc/mysql/conf.d/performance-schema.cnf:ro
+    networks:
+      - mariadb-network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mariadb-11:
+    image: mariadb:11
+    container_name: mariadb-11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MARIADB_11_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MARIADB_11_DATABASE}
+      MYSQL_USER: ${MARIADB_11_USER}
+      MYSQL_PASSWORD: ${MARIADB_11_PASSWORD}
+    ports:
+      - "${MARIADB_11_PORT}:3306"
+    volumes:
+      - mariadb_11_data:/var/lib/mysql
+      - ./init-scripts/v11:/docker-entrypoint-initdb.d
+      - ./mysql-config/performance-schema.cnf:/etc/mysql/conf.d/performance-schema.cnf:ro
+    networks:
+      - mariadb-network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mariadb-12:
+    image: mariadb:latest
+    container_name: mariadb-12
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MARIADB_12_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MARIADB_12_DATABASE}
+      MYSQL_USER: ${MARIADB_12_USER}
+      MYSQL_PASSWORD: ${MARIADB_12_PASSWORD}
+    ports:
+      - "${MARIADB_12_PORT}:3306"
+    volumes:
+      - mariadb_12_data:/var/lib/mysql
+      - ./init-scripts/v12:/docker-entrypoint-initdb.d
+      - ./mysql-config/performance-schema.cnf:/etc/mysql/conf.d/performance-schema.cnf:ro
+    networks:
+      - mariadb-network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  mariadb_10_data:
+    driver: local
+  mariadb_11_data:
+    driver: local
+  mariadb_12_data:
+    driver: local
+
+networks:
+  mariadb-network:
+    driver: bridge

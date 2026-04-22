@@ -1,0 +1,28 @@
+# MariaDB Configuration for Performance Schema
+# This file enables performance_schema for QPM monitoring
+
+[mysqld]
+# Enable Performance Schema
+performance_schema = ON
+
+# Configure statement instrumentation
+performance-schema-instrument='statement/%=ON'
+performance-schema-consumer-events-statements-current=ON
+performance-schema-consumer-events-statements-history=ON
+performance-schema-consumer-statements-digest=ON
+
+# Configure wait event instrumentation
+performance-schema-instrument='wait/%=ON'
+performance-schema-consumer-events-waits-current=ON
+performance-schema-consumer-events-waits-history=ON
+
+# Configure thread instrumentation
+performance-schema-consumer-thread-instrumentation=ON
+
+# History sizes
+performance_schema_events_statements_history_size=100
+performance_schema_events_statements_history_long_size=1000
+performance_schema_events_waits_history_size=100
+
+# Maximum size for digest text
+performance_schema_max_digest_length=4096
