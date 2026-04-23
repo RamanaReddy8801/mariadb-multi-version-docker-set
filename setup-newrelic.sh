@@ -18,9 +18,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Default monitoring user credentials
-NEWRELIC_DB_USER="newrelic"
-NEWRELIC_DB_PASSWORD="NewRelic123!"
+# Monitoring user credentials — must be set in .env
+NEWRELIC_DB_USER="${NEWRELIC_DB_USER:?'NEWRELIC_DB_USER must be set in .env'}"
+NEWRELIC_DB_PASSWORD="${NEWRELIC_DB_PASSWORD:?'NEWRELIC_DB_PASSWORD must be set in .env'}"
 
 # Function to print colored messages
 print_info() {
@@ -50,10 +50,10 @@ print_header() {
 # Check if license key is provided
 check_license_key() {
     if [ -z "$NEW_RELIC_LICENSE_KEY" ]; then
-        print_error "NEW_RELIC_LICENSE_KEY environment variable is not set!"
+        print_error "NEW_RELIC_LICENSE_KEY is not set in .env!"
         echo ""
-        echo "Please set your New Relic license key:"
-        echo "  export NEW_RELIC_LICENSE_KEY='your_license_key_here'"
+        echo "Add it to your .env file:"
+        echo "  NEW_RELIC_LICENSE_KEY=your_license_key_here"
         echo ""
         exit 1
     fi
