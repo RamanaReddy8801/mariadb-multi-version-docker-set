@@ -342,10 +342,12 @@ Want to monitor your MariaDB containers with New Relic? We've got you covered!
 ### Quick Setup
 
 ```bash
-# Set your New Relic license key
-export NEW_RELIC_LICENSE_KEY="your_license_key_here"
+# 1. Add credentials to .env
+NEW_RELIC_LICENSE_KEY=your_license_key_here
+NEWRELIC_DB_USER=newrelic
+NEWRELIC_DB_PASSWORD=your_monitor_password_here
 
-# Run automated setup
+# 2. Run automated setup
 ./setup-newrelic.sh
 ```
 
