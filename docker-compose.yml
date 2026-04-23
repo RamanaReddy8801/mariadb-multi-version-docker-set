@@ -71,6 +71,42 @@ services:
       timeout: 5s
       retries: 3
 
+  # ── New Relic agent container ────────────────────────────────────────────
+  # Single agent monitors all three MariaDB containers.
+  # entrypoint.sh writes a mysql-config.yml with three nri-mysql entries,
+  # one per MariaDB version, using container names as hostnames over the
+  # shared Docker network.
+
+  newrelic-agent:
+    image: newrelic/infrastructure-bundle:latest
+    container_name: newrelic-agent
+    restart: unless-stopped
+    cap_add:
+      - SYS_PTRACE
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    environment:
+      NRIA_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY}
+      NRIA_DISPLAY_NAME: mariadb-monitor
+      NRIA_OVERRIDE_HOST_ROOT: /host
+      NRIA_IS_CONTAINERIZED: "true"
+      NEWRELIC_DB_USER: ${NEWRELIC_DB_USER}
+      NEWRELIC_DB_PASSWORD: ${NEWRELIC_DB_PASSWORD}
+    volumes:
+      - ./newrelic-config/entrypoint.sh:/entrypoint.sh:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+    networks:
+      - mariadb-network
+    depends_on:
+      mariadb-10:
+        condition: service_healthy
+      mariadb-11:
+        condition: service_healthy
+      mariadb-12:
+        condition: service_healthy
+
 volumes:
   mariadb_10_data:
     driver: local

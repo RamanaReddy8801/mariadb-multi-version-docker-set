@@ -1,0 +1,63 @@
+integrations:
+  - name: nri-mysql
+    env:
+      HOSTNAME: mariadb-10
+      PORT: 3306
+      USERNAME: ${NEWRELIC_DB_USER}
+      PASSWORD: ${NEWRELIC_DB_PASSWORD}
+      DATABASE: testdb
+      METRICS: "true"
+      INVENTORY: "true"
+      EXTENDED_METRICS: "true"
+      EXTENDED_INNODB_METRICS: "true"
+      EXTENDED_MY_ISAM_METRICS: "true"
+      REMOTE_MONITORING: "true"
+      ENABLE_QUERY_MONITORING: "true"
+    interval: 30s
+    labels:
+      env: development
+      role: database
+      version: "10"
+    inventory_source: config/mysql
+
+  - name: nri-mysql
+    env:
+      HOSTNAME: mariadb-11
+      PORT: 3306
+      USERNAME: ${NEWRELIC_DB_USER}
+      PASSWORD: ${NEWRELIC_DB_PASSWORD}
+      DATABASE: testdb
+      METRICS: "true"
+      INVENTORY: "true"
+      EXTENDED_METRICS: "true"
+      EXTENDED_INNODB_METRICS: "true"
+      EXTENDED_MY_ISAM_METRICS: "true"
+      REMOTE_MONITORING: "true"
+      ENABLE_QUERY_MONITORING: "true"
+    interval: 30s
+    labels:
+      env: development
+      role: database
+      version: "11"
+    inventory_source: config/mysql
+
+  - name: nri-mysql
+    env:
+      HOSTNAME: mariadb-12
+      PORT: 3306
+      USERNAME: ${NEWRELIC_DB_USER}
+      PASSWORD: ${NEWRELIC_DB_PASSWORD}
+      DATABASE: testdb
+      METRICS: "true"
+      INVENTORY: "true"
+      EXTENDED_METRICS: "true"
+      EXTENDED_INNODB_METRICS: "true"
+      EXTENDED_MY_ISAM_METRICS: "true"
+      REMOTE_MONITORING: "true"
+      ENABLE_QUERY_MONITORING: "true"
+    interval: 30s
+    labels:
+      env: development
+      role: database
+      version: "12"
+    inventory_source: config/mysql

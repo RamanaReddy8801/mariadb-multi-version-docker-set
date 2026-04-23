@@ -1,408 +1,254 @@
 # New Relic Setup Guide for MariaDB Docker Containers
 
-This guide explains how to install and configure New Relic Infrastructure agent and MySQL integration for monitoring your MariaDB containers.
+## Architecture
+
+New Relic monitoring uses a **single agent container** that monitors all three MariaDB
+instances. The agent runs the official `newrelic/infrastructure-bundle` image (which
+includes `nri-mysql`) and connects to each MariaDB container over the shared Docker network.
+
+```
+┌──────────────────────────── mariadb-network ───────────────────────────┐
+│                                                                         │
+│  [mariadb-10]           [mariadb-11]           [mariadb-12]            │
+│  port 3306              port 3306              port 3306               │
+│       ▲                      ▲                      ▲                  │
+│       │ hostname:mariadb-10  │ hostname:mariadb-11  │ hostname:mariadb-12 │
+│       └──────────────────────┼──────────────────────┘                  │
+│                         [newrelic-agent]                                │
+│                   infrastructure-bundle + nri-mysql                    │
+│                   (3 integration entries, one per DB)                  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Why this approach:**
+- No agent installation inside the MariaDB containers
+- Single container to manage, replace binary once instead of three times
+- Agent container survives MariaDB container recreations
+- Follows the official New Relic containerised agent pattern
+
+---
 
 ## Prerequisites
 
-- Docker containers running (mariadb-10, mariadb-11, mariadb-12)
+- Docker containers running (`mariadb-10`, `mariadb-11`, `mariadb-12`)
 - New Relic account with a License Key
-- Root access to containers
-
-## Overview
-
-The setup includes:
-1. Installing New Relic Infrastructure agent in each container
-2. Installing MySQL/MariaDB integration
-3. Creating a monitoring user in each database
-4. Configuring the integration
-5. Verifying the connection
+- `.env` file configured (see below)
 
 ---
 
-## Quick Setup (Automated)
+## Quick Setup
 
-### 1. Add New Relic credentials to `.env`
+### Step 1 — Add New Relic credentials to `.env`
 
 ```bash
-# Add these to your .env file
 NEW_RELIC_LICENSE_KEY=your_license_key_here
 NEWRELIC_DB_USER=newrelic
 NEWRELIC_DB_PASSWORD=your_monitor_password_here
 ```
 
-All three variables are **required** — the script will exit with an error if any are missing.
+All three are required. The script and docker-compose both fail immediately if any are missing.
 
-### 2. Run the automated setup script
+### Step 2 — Create the monitoring user in each MariaDB container
 
 ```bash
+# All three containers at once
 ./setup-newrelic.sh
+
+# Or one at a time (useful for testing)
+./setup-newrelic.sh mariadb-10
+./setup-newrelic.sh mariadb-11
+./setup-newrelic.sh mariadb-12
+```
+
+This creates `'newrelic'@'%'` in each database with `REPLICATION CLIENT` and `SELECT`
+grants so the agent container can connect over the Docker network.
+
+### Step 3 — Start the New Relic agent container
+
+```bash
+# Start agent container only (if MariaDB containers are already running)
+docker-compose up -d newrelic-agent
+
+# Or start everything together from scratch
+docker-compose up -d
+```
+
+The agent container waits for all three MariaDB containers to be healthy before starting
+(`depends_on: condition: service_healthy`).
+
+### Step 4 — Verify
+
+```bash
+# Check agent container is running
+docker ps | grep newrelic-agent
+
+# Check agent logs for any errors
+docker logs newrelic-agent -f
+```
+
+Data appears in New Relic UI after ~2 minutes:
+- **Infrastructure > Hosts** — look for `mariadb-monitor`
+- **Infrastructure > Integrations > MySQL** — per-database metrics (one entry per MariaDB version)
+
+---
+
+## How it works
+
+### Agent image
+
+`newrelic/infrastructure-bundle:latest` — the official New Relic image that bundles
+the infrastructure agent plus all on-host integrations including `nri-mysql`.
+No custom Dockerfile needed.
+
+### Integration config
+
+`entrypoint.sh` generates `/etc/newrelic-infra/integrations.d/mysql-config.yml` at
+container startup with three `nri-mysql` entries — one per MariaDB version. Credentials
+are substituted from the container's environment variables at write time.
+
+The host-side reference config lives at:
+```
+newrelic-config/mysql-config.yml   (all three entries, reference only)
+newrelic-config/entrypoint.sh      (generates the config and starts the agent)
+```
+
+### Credentials flow
+
+```
+.env
+ ├── NEW_RELIC_LICENSE_KEY  → NRIA_LICENSE_KEY env var in agent container
+ ├── NEWRELIC_DB_USER       → NEWRELIC_DB_USER env var → substituted in mysql-config.yml
+ └── NEWRELIC_DB_PASSWORD   → NEWRELIC_DB_PASSWORD env var → substituted in mysql-config.yml
 ```
 
 ---
 
-## Manual Setup Steps
+## Manual setup (without the script)
 
-### Step 1: Configure `.env`
-
-Add the New Relic variables to your `.env` file before running any manual commands:
-
-```bash
-NEW_RELIC_LICENSE_KEY=your_license_key_here
-NEWRELIC_DB_USER=newrelic
-NEWRELIC_DB_PASSWORD=your_monitor_password_here
-```
-
-Then load them in your shell:
+### Create monitoring user
 
 ```bash
 source load-env.sh
-```
 
-### Step 2: Install New Relic Infrastructure Agent in Each Container
-
-For each container (mariadb-10, mariadb-11, mariadb-12):
-
-```bash
-# Update package lists and install dependencies
-docker exec mariadb-10 bash -c "
-  apt-get update && \
-  apt-get install -y curl gnupg apt-transport-https ca-certificates procps
-"
-
-# Add New Relic's GPG key and repository
-docker exec mariadb-10 bash -c "
-  curl -s https://download.newrelic.com/infrastructure_agent/gpg/newrelic-infra.gpg | apt-key add - && \
-  echo 'deb https://download.newrelic.com/infrastructure_agent/linux/apt jammy main' > /etc/apt/sources.list.d/newrelic-infra.list
-"
-
-# Install the Infrastructure agent
-docker exec mariadb-10 bash -c "
-  apt-get update && \
-  apt-get install -y newrelic-infra
-"
-
-# Configure the license key (reads from your shell env after sourcing load-env.sh)
-docker exec mariadb-10 bash -c "cat > /etc/newrelic-infra.yml << EOF
-license_key: ${NEW_RELIC_LICENSE_KEY}
-display_name: mariadb-10
-log_level: info
-EOF
-"
-```
-
-Repeat for mariadb-11 and mariadb-12 (change display_name accordingly).
-
-### Step 3: Create Monitoring User in Each Database
-
-#### For MariaDB 10:
-
-```bash
+# MariaDB 10
 docker exec mariadb-10 mysql -uroot -p${MARIADB_10_ROOT_PASSWORD} -e "
-  CREATE USER IF NOT EXISTS '${NEWRELIC_DB_USER}'@'localhost' IDENTIFIED BY '${NEWRELIC_DB_PASSWORD}';
-  GRANT REPLICATION CLIENT ON *.* TO '${NEWRELIC_DB_USER}'@'localhost';
-  GRANT SELECT ON *.* TO '${NEWRELIC_DB_USER}'@'localhost';
+  CREATE USER IF NOT EXISTS '${NEWRELIC_DB_USER}'@'%' IDENTIFIED BY '${NEWRELIC_DB_PASSWORD}';
+  GRANT REPLICATION CLIENT ON *.* TO '${NEWRELIC_DB_USER}'@'%';
+  GRANT SELECT ON *.* TO '${NEWRELIC_DB_USER}'@'%';
+  GRANT PROCESS ON *.* TO '${NEWRELIC_DB_USER}'@'%';
   FLUSH PRIVILEGES;
 "
-```
 
-#### For MariaDB 11:
-
-```bash
+# MariaDB 11
 docker exec mariadb-11 mariadb -uroot -p${MARIADB_11_ROOT_PASSWORD} -e "
-  CREATE USER IF NOT EXISTS '${NEWRELIC_DB_USER}'@'localhost' IDENTIFIED BY '${NEWRELIC_DB_PASSWORD}';
-  GRANT REPLICATION CLIENT ON *.* TO '${NEWRELIC_DB_USER}'@'localhost';
-  GRANT SELECT ON *.* TO '${NEWRELIC_DB_USER}'@'localhost';
+  CREATE USER IF NOT EXISTS '${NEWRELIC_DB_USER}'@'%' IDENTIFIED BY '${NEWRELIC_DB_PASSWORD}';
+  GRANT REPLICATION CLIENT ON *.* TO '${NEWRELIC_DB_USER}'@'%';
+  GRANT SELECT ON *.* TO '${NEWRELIC_DB_USER}'@'%';
+  GRANT PROCESS ON *.* TO '${NEWRELIC_DB_USER}'@'%';
   FLUSH PRIVILEGES;
 "
-```
 
-#### For MariaDB 12:
-
-```bash
+# MariaDB 12
 docker exec mariadb-12 mariadb -uroot -p${MARIADB_12_ROOT_PASSWORD} -e "
-  CREATE USER IF NOT EXISTS '${NEWRELIC_DB_USER}'@'localhost' IDENTIFIED BY '${NEWRELIC_DB_PASSWORD}';
-  GRANT REPLICATION CLIENT ON *.* TO '${NEWRELIC_DB_USER}'@'localhost';
-  GRANT SELECT ON *.* TO '${NEWRELIC_DB_USER}'@'localhost';
+  CREATE USER IF NOT EXISTS '${NEWRELIC_DB_USER}'@'%' IDENTIFIED BY '${NEWRELIC_DB_PASSWORD}';
+  GRANT REPLICATION CLIENT ON *.* TO '${NEWRELIC_DB_USER}'@'%';
+  GRANT SELECT ON *.* TO '${NEWRELIC_DB_USER}'@'%';
+  GRANT PROCESS ON *.* TO '${NEWRELIC_DB_USER}'@'%';
   FLUSH PRIVILEGES;
 "
 ```
 
-### Step 4: Install MySQL Integration
+> **Note:** The user is created with `'%'` (any host), not `'localhost'`, because the
+> agent connects from a separate container on the Docker network, not from inside
+> the MariaDB container itself.
 
-For each container:
-
-```bash
-# Install the integration package
-docker exec mariadb-10 apt-get install -y nri-mysql
-
-# Create integration configuration directory if it doesn't exist
-docker exec mariadb-10 mkdir -p /etc/newrelic-infra/integrations.d
-```
-
-Repeat for mariadb-11 and mariadb-12.
-
-### Step 5: Create MySQL Integration Configuration
-
-#### For MariaDB 10:
+### Start agent container
 
 ```bash
-docker exec mariadb-10 bash -c "cat > /etc/newrelic-infra/integrations.d/mysql-config.yml << EOF
-integrations:
-  - name: nri-mysql
-    env:
-      HOSTNAME: localhost
-      PORT: 3306
-      USERNAME: ${NEWRELIC_DB_USER}
-      PASSWORD: ${NEWRELIC_DB_PASSWORD}
-      DATABASE: testdb
-      METRICS: true
-      INVENTORY: true
-      EXTENDED_METRICS: true
-      EXTENDED_INNODB_METRICS: true
-      EXTENDED_MY_ISAM_METRICS: true
-    interval: 30s
-    labels:
-      env: development
-      role: database
-      version: '10'
-    inventory_source: config/mysql
-EOF
-"
-```
-
-#### For MariaDB 11:
-
-```bash
-docker exec mariadb-11 bash -c "cat > /etc/newrelic-infra/integrations.d/mysql-config.yml << EOF
-integrations:
-  - name: nri-mysql
-    env:
-      HOSTNAME: localhost
-      PORT: 3306
-      USERNAME: ${NEWRELIC_DB_USER}
-      PASSWORD: ${NEWRELIC_DB_PASSWORD}
-      DATABASE: testdb
-      METRICS: true
-      INVENTORY: true
-      EXTENDED_METRICS: true
-      EXTENDED_INNODB_METRICS: true
-      EXTENDED_MY_ISAM_METRICS: true
-    interval: 30s
-    labels:
-      env: development
-      role: database
-      version: '11'
-    inventory_source: config/mysql
-EOF
-"
-```
-
-#### For MariaDB 12:
-
-```bash
-docker exec mariadb-12 bash -c "cat > /etc/newrelic-infra/integrations.d/mysql-config.yml << EOF
-integrations:
-  - name: nri-mysql
-    env:
-      HOSTNAME: localhost
-      PORT: 3306
-      USERNAME: ${NEWRELIC_DB_USER}
-      PASSWORD: ${NEWRELIC_DB_PASSWORD}
-      DATABASE: testdb
-      METRICS: true
-      INVENTORY: true
-      EXTENDED_METRICS: true
-      EXTENDED_INNODB_METRICS: true
-      EXTENDED_MY_ISAM_METRICS: true
-    interval: 30s
-    labels:
-      env: development
-      role: database
-      version: '12'
-    inventory_source: config/mysql
-EOF
-"
-```
-
-### Step 6: Start New Relic Infrastructure Agent
-
-For each container:
-
-```bash
-docker exec mariadb-10 service newrelic-infra start
-docker exec mariadb-11 service newrelic-infra start
-docker exec mariadb-12 service newrelic-infra start
-```
-
-### Step 7: Verify Connection
-
-#### Test Database Connection:
-
-```bash
-# Test MariaDB 10
-docker exec mariadb-10 mysql -u${NEWRELIC_DB_USER} -p${NEWRELIC_DB_PASSWORD} -e "SELECT VERSION();"
-
-# Test MariaDB 11
-docker exec mariadb-11 mariadb -u${NEWRELIC_DB_USER} -p${NEWRELIC_DB_PASSWORD} -e "SELECT VERSION();"
-
-# Test MariaDB 12
-docker exec mariadb-12 mariadb -u${NEWRELIC_DB_USER} -p${NEWRELIC_DB_PASSWORD} -e "SELECT VERSION();"
-```
-
-#### Check New Relic Agent Status:
-
-```bash
-docker exec mariadb-10 service newrelic-infra status
-docker exec mariadb-11 service newrelic-infra status
-docker exec mariadb-12 service newrelic-infra status
-```
-
-#### Check Integration Logs:
-
-```bash
-docker exec mariadb-10 tail -f /var/log/newrelic-infra/newrelic-infra.log
+docker-compose up -d newrelic-agent
 ```
 
 ---
 
-## Replacing the nri-mysql Binary with a Local Build
+## Replacing the nri-mysql binary with a custom build
 
-The `nri-mysql` apt package installs the integration binary at:
+The `nri-mysql` binary inside the agent container lives at:
 ```
 /var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql
 ```
 
-If you have a custom or modified build of `nri-mysql`, you can swap it out manually using `docker cp`.
-
-> **Important:** Your local binary must be compiled for Linux (`GOOS=linux GOARCH=amd64`), not macOS.
-
-### Build for Linux (if building from source on Mac):
-
 ```bash
+# Build for Linux (if on Mac)
 GOOS=linux GOARCH=amd64 go build -o nri-mysql ./cmd/nri-mysql
+
+# Replace in the single agent container
+docker exec newrelic-agent rm /var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql
+docker cp /path/to/your/nri-mysql newrelic-agent:/var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql
+docker exec newrelic-agent chmod +x /var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql
+docker exec newrelic-agent /var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql -show_version
 ```
 
-### Replace the binary in each container:
-
-```bash
-# 1. Remove the apt-installed binary
-docker exec mariadb-10 rm /var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql
-
-# 2. Copy your local binary in
-docker cp /path/to/your/nri-mysql mariadb-10:/var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql
-
-# 3. Make it executable
-docker exec mariadb-10 chmod +x /var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql
-
-# 4. Verify it's your binary
-docker exec mariadb-10 /var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql --version
-```
-
-Repeat for mariadb-11 and mariadb-12:
-
-```bash
-docker cp /path/to/your/nri-mysql mariadb-11:/var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql
-docker exec mariadb-11 chmod +x /var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql
-
-docker cp /path/to/your/nri-mysql mariadb-12:/var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql
-docker exec mariadb-12 chmod +x /var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql
-```
-
-### Test the replaced binary manually:
-
-```bash
-docker exec mariadb-10 /var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql \
-  -hostname localhost \
-  -port 3306 \
-  -username ${NEWRELIC_DB_USER} \
-  -password ${NEWRELIC_DB_PASSWORD} \
-  -metrics
-```
-
----
-
-## Verify in New Relic UI
-
-1. Log in to your New Relic account
-2. Navigate to **Infrastructure > Hosts**
-3. Look for `mariadb-10`, `mariadb-11`, `mariadb-12` in the hosts list
-4. Navigate to **Infrastructure > Integrations > MySQL**
-5. You should see metrics from all three databases
+> Binary must be compiled for Linux (`GOOS=linux GOARCH=amd64`), not macOS.
 
 ---
 
 ## Troubleshooting
 
-### Agent Not Starting
+### Agent container not starting
 
 ```bash
-# Check if agent process is running
-docker exec mariadb-10 ps aux | grep newrelic
-
-# Check for errors in logs
-docker exec mariadb-10 cat /var/log/newrelic-infra/newrelic-infra.log
+docker logs newrelic-agent
 ```
 
-### Integration Not Working
+Common causes:
+- `NEW_RELIC_LICENSE_KEY` missing from `.env`
+- One or more MariaDB containers not healthy yet — agent waits for all three to pass `service_healthy`
+
+### Integration not sending data
 
 ```bash
-# Manually test the integration
-docker exec mariadb-10 /var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql \
-  -hostname localhost \
+# Check agent logs for integration errors
+docker logs newrelic-agent | grep -i error
+
+# Verify the monitoring user exists with correct host on each MariaDB container
+source load-env.sh
+docker exec mariadb-10 mysql -uroot -p${MARIADB_10_ROOT_PASSWORD} -e "
+  SELECT user, host FROM mysql.user WHERE user='${NEWRELIC_DB_USER}';
+"
+# Should show host='%', not host='localhost'
+```
+
+### Test the nri-mysql connection manually
+
+```bash
+source load-env.sh
+docker exec newrelic-agent /var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql \
+  -hostname mariadb-10 \
   -port 3306 \
   -username ${NEWRELIC_DB_USER} \
   -password ${NEWRELIC_DB_PASSWORD} \
   -metrics
 ```
 
-### Database Connection Issues
+Replace `-hostname mariadb-10` with `mariadb-11` or `mariadb-12` to test other instances.
+A successful run returns a JSON payload containing `"event_type":"MysqlSample"`.
+
+### Verify config was generated correctly
 
 ```bash
-# Verify user exists and has correct permissions
-docker exec mariadb-10 mysql -uroot -p${MARIADB_10_ROOT_PASSWORD} -e "
-  SELECT user, host FROM mysql.user WHERE user='${NEWRELIC_DB_USER}';
-  SHOW GRANTS FOR '${NEWRELIC_DB_USER}'@'localhost';
-"
+docker exec newrelic-agent cat /etc/newrelic-infra/integrations.d/mysql-config.yml
 ```
 
 ---
 
 ## Important Notes
 
-1. **Container Persistence**: The New Relic agent is installed inside the containers. If you recreate the containers, you'll need to reinstall.
-2. **Production Setup**: For production, consider creating custom Docker images with New Relic pre-installed.
+1. **Agent container is separate** from MariaDB containers — recreating MariaDB containers
+   with `docker-compose down` does NOT affect `newrelic-agent`.
+2. **Re-run `setup-newrelic.sh`** only if the MariaDB containers are recreated and the
+   monitoring user is lost (data volumes are wiped with `docker-compose down -v`).
 3. **Security**: All credentials are managed via `.env`. Never hardcode or commit credentials.
-4. **Metrics Interval**: Adjust the `interval` in the config based on your monitoring needs (default: 30s).
-
-## Custom Docker Images (Recommended for Production)
-
-For persistent setups, create custom Dockerfiles:
-
-```dockerfile
-FROM mariadb:10
-
-# Install New Relic Infrastructure agent
-RUN apt-get update && \
-    apt-get install -y curl gnupg apt-transport-https ca-certificates && \
-    curl -s https://download.newrelic.com/infrastructure_agent/gpg/newrelic-infra.gpg | apt-key add - && \
-    echo 'deb https://download.newrelic.com/infrastructure_agent/linux/apt jammy main' > /etc/apt/sources.list.d/newrelic-infra.list && \
-    apt-get update && \
-    apt-get install -y newrelic-infra nri-mysql && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-# Copy configurations
-COPY newrelic-infra.yml /etc/newrelic-infra.yml
-COPY mysql-config.yml /etc/newrelic-infra/integrations.d/mysql-config.yml
-```
-
-## Monitoring Metrics
-
-The integration collects:
-- **Database metrics**: Connections, queries, buffer pool, etc.
-- **InnoDB metrics**: Buffer pool usage, log writes, row operations
-- **Replication metrics**: Slave status, lag
-- **Table metrics**: Size, row count
-- **Extended metrics**: Detailed performance data
-
-Check your New Relic dashboard for real-time monitoring!
+4. **Metrics interval**: Adjust `interval` in `newrelic-config/mysql-config.yml`
+   based on your monitoring needs (default: 30s).
+5. **Binary replacement**: The `nri-mysql` binary only needs to be replaced once in
+   `newrelic-agent` — it monitors all three MariaDB instances from there.
