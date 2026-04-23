@@ -1,383 +1,337 @@
-# MariaDB Docker Setup - Multi-Version Testing
+# MariaDB Multi-Version Docker Setup
 
-This setup allows you to run MariaDB versions 10, 11, and 12 simultaneously using Docker, with each version running on a separate port.
+Run MariaDB versions 10, 11, and 12 simultaneously in Docker for **QPM query testing** and **New Relic monitoring**.
 
-## 📋 Prerequisites
+---
 
-- Docker installed and running
-- Docker Compose installed
-- At least 2GB of free disk space
+## Two Main Components
 
-## ⚙️ Environment Setup
+| Component | What it does |
+|---|---|
+| **QPM Query Testing** | Test and validate slow query, wait event, and blocking session SQL against all 3 MariaDB versions |
+| **New Relic Monitoring** | Ship MariaDB metrics to New Relic using a single infrastructure agent container |
 
-This project uses environment variables for secure credential management.
+---
 
-### Quick Setup (For Testing)
+## Prerequisites
 
-The repository includes a default `.env` file for immediate testing. If it's missing, create it:
+- Docker + Docker Compose installed
+- At least 2GB free disk space
+- New Relic account (only for monitoring component)
+
+---
+
+## 1. First-Time Setup
+
+### Configure credentials
 
 ```bash
 cp .env.example .env
+# Edit .env with your passwords and New Relic keys
 ```
 
-**Default credentials are set for quick testing. Change them for production use!**
+Required variables in `.env`:
 
-### Custom Setup (Recommended for Production)
-
-1. **Create your environment file:**
-   ```bash
-   cp .env.example .env
-   ```
-
-2. **Edit `.env` with your credentials:**
-   ```bash
-   nano .env
-   # or use your preferred editor
-   ```
-
-3. **Set strong passwords:**
-   ```bash
-   # Example .env content
-   MARIADB_10_ROOT_PASSWORD=StrongP@ssw0rd123!
-   MARIADB_10_DATABASE=myapp_db
-   MARIADB_10_USER=myapp_user
-   MARIADB_10_PASSWORD=AnotherStr0ng!Pass
-   MARIADB_10_PORT=3310
-   
-   # Repeat for MariaDB 11 and 12...
-   ```
-
-4. **Secure your `.env` file:**
-   ```bash
-   chmod 600 .env
-   ```
-
-**📖 For detailed configuration options, see [ENV_SETUP.md](ENV_SETUP.md)**
-
-**🔐 Security Note:** The `.env` file is git-ignored and will never be committed. Only `.env.example` (with placeholder values) is tracked.
-
-## 🚀 Quick Start
-
-### 1. Setup Environment (First Time Only)
-
-If you haven't already, set up your environment variables:
 ```bash
-cp .env.example .env
-# Edit .env if you want custom credentials
+# MariaDB credentials (one set per version)
+MARIADB_10_ROOT_PASSWORD=your_root_password
+MARIADB_10_DATABASE=testdb
+MARIADB_10_USER=testuser
+MARIADB_10_PASSWORD=your_password
+MARIADB_10_PORT=3310
+# ... repeat for MARIADB_11_* and MARIADB_12_*
+
+# New Relic (required only for monitoring)
+NEW_RELIC_LICENSE_KEY=your_license_key_here
+NEWRELIC_DB_USER=newrelic
+NEWRELIC_DB_PASSWORD=your_monitor_password_here
 ```
 
-### 2. Start All MariaDB Versions
+### Start all containers
 
 ```bash
 docker-compose up -d
 ```
 
-This will:
-- Pull the required MariaDB images (if not already downloaded)
-- Create three separate containers (mariadb-10, mariadb-11, mariadb-12)
-- Initialize each with sample data from the init scripts
-- Expose ports 3310, 3311, and 3312 respectively
-- Use credentials from your `.env` file
+**What happens automatically on first boot:**
+- MariaDB 10, 11, 12 containers start on ports 3310, 3311, 3312
+- `init.sql` runs per version → creates `testdb` + `users` table
+- `qpm-testdata.sql` runs per version → creates `qpm_test` database with 5 tables and ~16,500 rows of test data
+- Performance Schema consumers are enabled via `mysql-config/performance-schema.cnf`
 
-### 3. Check Container Status
+### Verify containers are healthy
 
 ```bash
 docker-compose ps
 ```
 
-All containers should show as "healthy" after a few seconds.
+All containers should show `healthy` status.
 
-### 4. Run Test Queries Across All Versions
+---
+
+## Component 1: QPM Query Testing
+
+QPM (Query Performance Monitoring) queries read from MariaDB's Performance Schema to surface slow queries, wait events, and blocking sessions.
+
+### QPM queries
+
+| File | What it reports |
+|---|---|
+| `qpm-queries/slow-queries.sql` | Slowest queries from the last hour with execution stats |
+| `qpm-queries/wait-events.sql` | IO, lock, and mutex waits correlated to queries |
+| `qpm-queries/blocking-sessions.sql` | Active InnoDB lock conflicts with blocker/blocked query details |
+
+### Use case 1: Run a one-shot QPM test across all versions
+
+Generates blocking load, runs all 3 QPM queries on each container, saves Markdown reports.
+
+```bash
+./test-qpm-final.sh
+```
+
+Reports saved to `qpm-reports/final/mariadb_{10,11,12}_complete_<timestamp>.md`
+
+### Use case 2: Run QPM queries manually on a single container
+
+```bash
+source load-env.sh
+
+# Slow queries
+docker exec -i mariadb-10 mysql -uroot -p$MARIADB_10_ROOT_PASSWORD \
+  --table < qpm-queries/slow-queries.sql
+
+# Wait events
+docker exec -i mariadb-10 mysql -uroot -p$MARIADB_10_ROOT_PASSWORD \
+  --table < qpm-queries/wait-events.sql
+
+# Blocking sessions (only returns rows when a block is actively happening)
+docker exec -i mariadb-10 mysql -uroot -p$MARIADB_10_ROOT_PASSWORD \
+  --table < qpm-queries/blocking-sessions.sql
+```
+
+Replace `mariadb-10` / `$MARIADB_10_ROOT_PASSWORD` with `mariadb-11`/`$MARIADB_11_ROOT_PASSWORD` or `mariadb-12`/`$MARIADB_12_ROOT_PASSWORD` for other versions.
+
+### Use case 3: Continuous load for sustained QPM testing
+
+Runs 4 parallel load loops indefinitely until the container stops or you press Ctrl+C.
+Use this when testing a custom `nri-mysql` binary or validating QPM data over time.
+
+```bash
+# mariadb-10 (default)
+./load-continuous.sh
+
+# mariadb-11
+./load-continuous.sh mariadb-11 mariadb $MARIADB_11_ROOT_PASSWORD
+
+# mariadb-12
+./load-continuous.sh mariadb-12 mariadb $MARIADB_12_ROOT_PASSWORD
+```
+
+What each loop generates:
+
+| Loop | Activity | Interval |
+|---|---|---|
+| slow-query | 8 rotating complex SELECTs, JOINs, full-table scans | every 3s |
+| blocking | InnoDB row lock contention (2 blocked sessions) | 90s hold, 5s gap |
+| dml | INSERT + UPDATE + DELETE on `orders` and `customers` | every 1s |
+| wait-event | Bulk UPDATEs across `large_table` to trigger IO waits | every 4s |
+
+Enable debug output to see SQL errors:
+```bash
+DEBUG=1 ./load-continuous.sh
+```
+
+### Use case 4: Verify MariaDB versions are correct
 
 ```bash
 ./test-all-versions.sh
 ```
 
-This script will execute the same queries on all three versions to verify compatibility.
+Runs `test-queries.sql` on all 3 containers and checks each is running the expected version.
 
-## 🔌 Connection Details
+### Use case 5: Manually simulate a blocking session
 
-**Default credentials** (can be changed in `.env` file):
-
-### MariaDB 10
-- **Container Name**: mariadb-10
-- **Port**: 3310
-- **Root Password**: rootpass10 (from `.env`)
-- **Database**: testdb (from `.env`)
-- **User**: testuser (from `.env`)
-- **User Password**: testpass (from `.env`)
-
-### MariaDB 11
-- **Container Name**: mariadb-11
-- **Port**: 3311
-- **Root Password**: rootpass11 (from `.env`)
-- **Database**: testdb (from `.env`)
-- **User**: testuser (from `.env`)
-- **User Password**: testpass (from `.env`)
-
-### MariaDB 12
-- **Container Name**: mariadb-12
-- **Port**: 3312
-- **Root Password**: rootpass12 (from `.env`)
-- **Database**: testdb (from `.env`)
-- **User**: testuser (from `.env`)
-- **User Password**: testpass (from `.env`)
-
-## 💻 Connecting to Each Version
-
-**Note:** These examples use default credentials from `.env`. If you changed your credentials, replace the passwords accordingly.
-
-### From Inside the Container
+Open two terminals and run one script in each:
 
 ```bash
-# MariaDB 10
-docker exec -it mariadb-10 mysql -uroot -prootpass10 testdb
+# Terminal 1 — becomes the blocker
+docker exec -i mariadb-10 mysql -uroot -p$MARIADB_10_ROOT_PASSWORD < create-blocking-session1.sql
 
-# MariaDB 11
-docker exec -it mariadb-11 mariadb -uroot -prootpass11 testdb
-
-# MariaDB 12
-docker exec -it mariadb-12 mariadb -uroot -prootpass12 testdb
+# Terminal 2 — becomes blocked
+docker exec -i mariadb-10 mysql -uroot -p$MARIADB_10_ROOT_PASSWORD < create-blocking-session2.sql
 ```
 
-### From Your Host Machine
+Then run `blocking-sessions.sql` in a third terminal to see the result.
 
-If you have MySQL client installed on your host:
+---
+
+## Component 2: New Relic Monitoring
+
+A single `newrelic-agent` container monitors all 3 MariaDB instances and ships metrics to New Relic.
+
+### Use case 1: Full setup from scratch
 
 ```bash
-# MariaDB 10
-mysql -h 127.0.0.1 -P 3310 -uroot -prootpass10 testdb
+# Step 1 — ensure NEW_RELIC_LICENSE_KEY, NEWRELIC_DB_USER, NEWRELIC_DB_PASSWORD are in .env
 
-# MariaDB 11
-mysql -h 127.0.0.1 -P 3311 -uroot -prootpass11 testdb
+# Step 2 — create monitoring user in each MariaDB container
+./setup-newrelic.sh
 
-# MariaDB 12
-mysql -h 127.0.0.1 -P 3312 -uroot -prootpass12 testdb
+# Step 3 — start the agent (or use docker-compose up -d to start everything)
+docker-compose up -d newrelic-agent
 ```
 
-### Using Docker Exec with SQL File
+The agent waits for all 3 MariaDB containers to be healthy before starting.
+
+### Use case 2: Verify the agent is running and collecting
 
 ```bash
-# Run queries from a file on MariaDB 10
-docker exec -i mariadb-10 mysql -uroot -prootpass10 testdb < your-queries.sql
+# Check container status
+docker ps | grep newrelic-agent
 
-# Run queries from a file on MariaDB 11
-docker exec -i mariadb-11 mysql -uroot -prootpass11 testdb < your-queries.sql
+# View live agent logs
+docker logs newrelic-agent -f
 
-# Run queries from a file on MariaDB 12
-docker exec -i mariadb-12 mysql -uroot -prootpass12 testdb < your-queries.sql
+# Verify generated integration config (should show 3 nri-mysql entries)
+docker exec newrelic-agent cat /etc/newrelic-infra/integrations.d/mysql-config.yml
 ```
 
-## 📁 File Structure
+### Use case 3: Test nri-mysql manually
+
+```bash
+source load-env.sh
+
+docker exec newrelic-agent /var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql \
+  -hostname mariadb-10 \
+  -port 3306 \
+  -username $NEWRELIC_DB_USER \
+  -password $NEWRELIC_DB_PASSWORD \
+  -metrics \
+  -enable_query_monitoring \
+  -pretty
+```
+
+Replace `-hostname mariadb-10` with `mariadb-11` or `mariadb-12` to test other instances.
+
+### Use case 4: Replace nri-mysql binary with a custom build
+
+```bash
+# Build for Linux (required if building on Mac)
+GOOS=linux GOARCH=amd64 go build -o nri-mysql ./cmd/nri-mysql
+
+# Replace binary in agent container
+docker exec newrelic-agent rm /var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql
+docker cp /path/to/your/nri-mysql newrelic-agent:/var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql
+docker exec newrelic-agent chmod +x /var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql
+
+# Verify
+docker exec newrelic-agent /var/db/newrelic-infra/newrelic-integrations/bin/nri-mysql -show_version
+```
+
+The binary monitors all 3 MariaDB instances — only one replacement needed.
+
+### New Relic UI
+
+- **Infrastructure > Hosts** — look for `mariadb-monitor`
+- **Infrastructure > Integrations > MySQL** — per-database metrics (one entry per version)
+
+For full setup documentation see [NEWRELIC_SETUP.md](NEWRELIC_SETUP.md).
+For quick commands and troubleshooting see [NEWRELIC_QUICKREF.md](NEWRELIC_QUICKREF.md).
+
+---
+
+## File Structure
 
 ```
 mariadb-docker-setup/
-├── docker-compose.yml          # Main orchestration file
-├── init-scripts/               # Initialization scripts
+│
+├── docker-compose.yml               # All containers: mariadb-10/11/12 + newrelic-agent
+├── .env                             # Credentials (git-ignored)
+├── .env.example                     # Template — copy to .env
+├── load-env.sh                      # Exports .env variables into shell
+│
+├── init-scripts/                    # Run automatically on container first boot
 │   ├── v10/
-│   │   └── init.sql           # MariaDB 10 init script
-│   ├── v11/
-│   │   └── init.sql           # MariaDB 11 init script
-│   └── v12/
-│       └── init.sql           # MariaDB 12 init script
-├── test-queries.sql            # Sample queries to test
-├── test-all-versions.sh        # Script to test all versions
-└── README.md                   # This file
+│   │   ├── init.sql                 # Creates testdb + users table
+│   │   └── qpm-testdata.sql         # Creates qpm_test + test data
+│   ├── v11/  (same structure)
+│   └── v12/  (same structure)
+│
+├── mysql-config/
+│   └── performance-schema.cnf       # Enables Performance Schema consumers (mounted into all MariaDB containers)
+│
+├── qpm-queries/                     # The QPM SQL queries being tested
+│   ├── slow-queries.sql
+│   ├── wait-events.sql
+│   └── blocking-sessions.sql
+│
+├── qpm-reports/
+│   └── final/                       # Test reports generated by test-qpm-final.sh
+│
+├── newrelic-config/
+│   ├── entrypoint.sh                # Generates mysql-config.yml at startup + starts agent
+│   └── mysql-config.yml             # Reference config (all 3 integration entries)
+│
+├── load-continuous.sh               # Continuous load generator (runs until stopped)
+├── test-qpm-final.sh                # One-shot QPM test across all versions → reports
+├── test-all-versions.sh             # Verifies containers run correct MariaDB versions
+├── setup-newrelic.sh                # Creates monitoring user in each MariaDB container
+├── create-blocking-session1.sql     # Manual blocker session (run in terminal 1)
+├── create-blocking-session2.sql     # Manual blocked session (run in terminal 2)
+└── test-queries.sql                 # Sample queries for test-all-versions.sh
 ```
 
-## 🧪 Testing Your Queries
+---
 
-1. **Edit** `test-queries.sql` with your own queries
-2. **Run** the test script:
-   ```bash
-   ./test-all-versions.sh
-   ```
-3. **Review** the output to see if queries work across all versions
+## Common Commands
 
-## 🛠️ Useful Commands
-
-### View Logs
+### Container management
 
 ```bash
-# All containers
-docker-compose logs -f
-
-# Specific version
-docker-compose logs -f mariadb-10
-docker-compose logs -f mariadb-11
-docker-compose logs -f mariadb-12
+docker-compose up -d                  # Start all containers
+docker-compose down                   # Stop and remove containers (keeps data)
+docker-compose down -v                # Stop, remove containers AND delete all data
+docker-compose ps                     # Check status of all containers
+docker-compose restart mariadb-10     # Restart a specific container
+docker-compose logs -f mariadb-10     # View logs for a specific container
 ```
 
-### Stop All Containers
+### Connect to a MariaDB container
 
 ```bash
-docker-compose down
+source load-env.sh
+
+docker exec -it mariadb-10 mysql -uroot -p$MARIADB_10_ROOT_PASSWORD testdb
+docker exec -it mariadb-11 mariadb -uroot -p$MARIADB_11_ROOT_PASSWORD testdb
+docker exec -it mariadb-12 mariadb -uroot -p$MARIADB_12_ROOT_PASSWORD testdb
 ```
 
-### Stop and Remove Data
+### Reset a single version (wipes data and reinitialises)
 
 ```bash
-docker-compose down -v
-```
-
-### Restart a Specific Version
-
-```bash
-docker-compose restart mariadb-10
-docker-compose restart mariadb-11
-docker-compose restart mariadb-12
-```
-
-### Start Only One Version
-
-```bash
-# Start only MariaDB 10
-docker-compose up -d mariadb-10
-
-# Start only MariaDB 11
-docker-compose up -d mariadb-11
-
-# Start only MariaDB 12
-docker-compose up -d mariadb-12
-```
-
-## 📊 Data Persistence
-
-Each version has its own named volume for data persistence:
-- `mariadb_10_data` - MariaDB 10 data
-- `mariadb_11_data` - MariaDB 11 data
-- `mariadb_12_data` - MariaDB 12 data
-
-Data persists even when containers are stopped or removed (unless you use `docker-compose down -v`).
-
-## 🔄 Resetting a Version
-
-To reset a specific version to its initial state:
-
-```bash
-# Stop the container
 docker-compose stop mariadb-10
-
-# Remove the volume
 docker volume rm mariadb-docker-setup_mariadb_10_data
-
-# Start again (will reinitialize)
 docker-compose up -d mariadb-10
 ```
 
-## 🔒 Security Note
+---
 
-**Warning**: The passwords in this setup are for development/testing only. For production use:
-- Use strong passwords
-- Store passwords in environment files (`.env`)
-- Never commit passwords to version control
-- Restrict network access appropriately
+## Troubleshooting
 
-## 🎯 Common Use Cases
-
-### Testing Query Compatibility
-
-Run the same query on all versions to check compatibility:
-
+### Container won't start
 ```bash
-# Example: Test a specific query
-echo "SELECT VERSION();" | docker exec -i mariadb-10 mysql -uroot -prootpass10 testdb
-echo "SELECT VERSION();" | docker exec -i mariadb-11 mysql -uroot -prootpass11 testdb
-echo "SELECT VERSION();" | docker exec -i mariadb-12 mysql -uroot -prootpass12 testdb
-```
-
-### Benchmarking
-
-Compare performance across versions using your own benchmark scripts.
-
-### Migration Testing
-
-Test database migrations before applying them to production.
-
-## 📝 Customization
-
-### Adding Custom Initialization
-
-Add more `.sql` files to the respective `init-scripts/v*/` directories. They will be executed in alphabetical order.
-
-### Changing Ports
-
-Edit the `ports` section in `docker-compose.yml`:
-
-```yaml
-ports:
-  - "YOUR_PORT:3306"
-```
-
-### Adding More Versions
-
-Copy and modify a service block in `docker-compose.yml` to add additional versions.
-
-## 🐛 Troubleshooting
-
-### Container Won't Start
-
-```bash
-# Check logs
 docker-compose logs mariadb-10
-
-# Check if port is already in use
-lsof -i :3310
+lsof -i :3310   # check if port is already in use
 ```
 
-### Connection Refused
+### QPM queries return empty results
+- Confirm Performance Schema is enabled: `docker exec mariadb-10 mysql -uroot -p$MARIADB_10_ROOT_PASSWORD -e "SHOW VARIABLES LIKE 'performance_schema';"`
+- Run `load-continuous.sh` first to generate activity, then re-run the queries
+- `blocking-sessions.sql` only returns rows when a block is **actively happening**
 
-- Wait 10-15 seconds after starting for containers to fully initialize
-- Check if containers are healthy: `docker-compose ps`
-- Verify ports are not blocked by firewall
-
-### Out of Memory
-
-Reduce the number of running containers or increase Docker's memory allocation.
-
-## � New Relic Monitoring (Optional)
-
-Want to monitor your MariaDB containers with New Relic? We've got you covered!
-
-### Quick Setup
-
+### New Relic agent not sending data
 ```bash
-# 1. Add credentials to .env
-NEW_RELIC_LICENSE_KEY=your_license_key_here
-NEWRELIC_DB_USER=newrelic
-NEWRELIC_DB_PASSWORD=your_monitor_password_here
-
-# 2. Run automated setup
-./setup-newrelic.sh
+docker logs newrelic-agent | grep -i error
+docker exec newrelic-agent env | grep NRIA_LICENSE_KEY
 ```
-
-This will install and configure:
-- New Relic Infrastructure agent in each container
-- MySQL/MariaDB integration for monitoring
-- Monitoring user with appropriate permissions
-- Integration configuration files
-
-### Documentation
-
-- **[NEWRELIC_SETUP.md](NEWRELIC_SETUP.md)** - Complete setup guide with manual instructions
-- **[NEWRELIC_QUICKREF.md](NEWRELIC_QUICKREF.md)** - Quick reference for common commands and troubleshooting
-
-### What Gets Monitored
-
-- Database connections and query performance
-- InnoDB buffer pool and cache metrics
-- Replication status and lag
-- Table sizes and row counts
-- Slow queries and lock waits
-- Server resource usage (CPU, memory, disk)
-
-After setup, view your metrics in New Relic:
-- **Infrastructure > Hosts**: Server-level metrics
-- **Infrastructure > Integrations > MySQL**: Database-specific metrics
-
-## 📚 Additional Resources
-
-- [MariaDB Documentation](https://mariadb.com/kb/en/documentation/)
-- [Docker Compose Documentation](https://docs.docker.com/compose/)
-- [MariaDB Docker Hub](https://hub.docker.com/_/mariadb)
-- [New Relic Infrastructure Agent](https://docs.newrelic.com/docs/infrastructure/install-infrastructure-agent/)
+See [NEWRELIC_QUICKREF.md](NEWRELIC_QUICKREF.md) for full troubleshooting steps.
