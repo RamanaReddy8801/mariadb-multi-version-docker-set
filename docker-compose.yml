@@ -8,7 +8,6 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MARIADB_10_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MARIADB_10_DATABASE}
       MYSQL_USER: ${MARIADB_10_USER}
       MYSQL_PASSWORD: ${MARIADB_10_PASSWORD}
     ports:
@@ -31,7 +30,6 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MARIADB_11_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MARIADB_11_DATABASE}
       MYSQL_USER: ${MARIADB_11_USER}
       MYSQL_PASSWORD: ${MARIADB_11_PASSWORD}
     ports:
@@ -54,7 +52,6 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MARIADB_12_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MARIADB_12_DATABASE}
       MYSQL_USER: ${MARIADB_12_USER}
       MYSQL_PASSWORD: ${MARIADB_12_PASSWORD}
     ports:
@@ -106,6 +103,99 @@ services:
         condition: service_healthy
       mariadb-12:
         condition: service_healthy
+
+  # ── mysql-app load generators ────────────────────────────────────────────
+  # One Node.js app per MariaDB version — fires slow queries against qpm_test.
+  # New Relic APM agent instruments every request for app-level tracing.
+
+  mysql-app-10:
+    build: ./mysql-app/services
+    container_name: mysql-app-10
+    restart: unless-stopped
+    ports:
+      - "${MYSQL_APP_10_PORT:-4010}:4000"
+    environment:
+      MYSQL_HOST: mariadb-10
+      MYSQL_USER: ${MARIADB_10_USER}
+      MYSQL_PASSWORD: ${MARIADB_10_PASSWORD}
+      MYSQL_DATABASE: employees
+      NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY}
+      NEW_RELIC_APP_NAME: mysql-app-mariadb-10
+      NEW_RELIC_NO_CONFIG_FILE: "true"
+      NEW_RELIC_DISTRIBUTED_TRACING_ENABLED: "true"
+      NEW_RELIC_LOG: stdout
+    networks:
+      - mariadb-network
+    depends_on:
+      mariadb-10:
+        condition: service_healthy
+
+  mysql-app-11:
+    build: ./mysql-app/services
+    container_name: mysql-app-11
+    restart: unless-stopped
+    ports:
+      - "${MYSQL_APP_11_PORT:-4011}:4000"
+    environment:
+      MYSQL_HOST: mariadb-11
+      MYSQL_USER: ${MARIADB_11_USER}
+      MYSQL_PASSWORD: ${MARIADB_11_PASSWORD}
+      MYSQL_DATABASE: employees
+      NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY}
+      NEW_RELIC_APP_NAME: mysql-app-mariadb-11
+      NEW_RELIC_NO_CONFIG_FILE: "true"
+      NEW_RELIC_DISTRIBUTED_TRACING_ENABLED: "true"
+      NEW_RELIC_LOG: stdout
+    networks:
+      - mariadb-network
+    depends_on:
+      mariadb-11:
+        condition: service_healthy
+
+  mysql-app-12:
+    build: ./mysql-app/services
+    container_name: mysql-app-12
+    restart: unless-stopped
+    ports:
+      - "${MYSQL_APP_12_PORT:-4012}:4000"
+    environment:
+      MYSQL_HOST: mariadb-12
+      MYSQL_USER: ${MARIADB_12_USER}
+      MYSQL_PASSWORD: ${MARIADB_12_PASSWORD}
+      MYSQL_DATABASE: employees
+      NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY}
+      NEW_RELIC_APP_NAME: mysql-app-mariadb-12
+      NEW_RELIC_NO_CONFIG_FILE: "true"
+      NEW_RELIC_DISTRIBUTED_TRACING_ENABLED: "true"
+      NEW_RELIC_LOG: stdout
+    networks:
+      - mariadb-network
+    depends_on:
+      mariadb-12:
+        condition: service_healthy
+
+  # ── k6 load generator ────────────────────────────────────────────────────
+  # Ramps to 1000 VUs hitting all 3 mysql-app instances randomly.
+  # Run on demand: docker-compose run --rm k6
+
+  k6:
+    image: grafana/k6
+    container_name: k6
+    volumes:
+      - ./mysql-app/k6:/scripts
+    environment:
+      MYSQL_APP_10_URL: http://mysql-app-10:4000
+      MYSQL_APP_11_URL: http://mysql-app-11:4000
+      MYSQL_APP_12_URL: http://mysql-app-12:4000
+    networks:
+      - mariadb-network
+    depends_on:
+      - mysql-app-10
+      - mysql-app-11
+      - mysql-app-12
+    command: run /scripts/load-test.js
+    profiles:
+      - load
 
 volumes:
   mariadb_10_data:
