@@ -82,17 +82,17 @@ You have **two options** to connect manually:
 
 #### Connect to MariaDB 10
 ```bash
-docker exec -it mariadb-10 mysql -uroot -prootpass10 testdb
+docker exec -it mariadb-10 mysql -uroot -prootpass10 qpm_test
 ```
 
 #### Connect to MariaDB 11
 ```bash
-docker exec -it mariadb-11 mysql -uroot -prootpass11 testdb
+docker exec -it mariadb-11 mysql -uroot -prootpass11 qpm_test
 ```
 
 #### Connect to MariaDB 12
 ```bash
-docker exec -it mariadb-12 mysql -uroot -prootpass12 testdb
+docker exec -it mariadb-12 mysql -uroot -prootpass12 qpm_test
 ```
 
 **Once connected, try some queries:**
@@ -129,17 +129,17 @@ Then connect:
 
 #### Connect to MariaDB 10
 ```bash
-mysql -h 127.0.0.1 -P 3310 -uroot -prootpass10 testdb
+mysql -h 127.0.0.1 -P 3310 -uroot -prootpass10 qpm_test
 ```
 
 #### Connect to MariaDB 11
 ```bash
-mysql -h 127.0.0.1 -P 3311 -uroot -prootpass11 testdb
+mysql -h 127.0.0.1 -P 3311 -uroot -prootpass11 qpm_test
 ```
 
 #### Connect to MariaDB 12
 ```bash
-mysql -h 127.0.0.1 -P 3312 -uroot -prootpass12 testdb
+mysql -h 127.0.0.1 -P 3312 -uroot -prootpass12 qpm_test
 ```
 
 ---
@@ -150,7 +150,7 @@ mysql -h 127.0.0.1 -P 3312 -uroot -prootpass12 testdb
 
 ```bash
 # Connect to any version
-docker exec -it mariadb-10 mysql -uroot -prootpass10 testdb
+docker exec -it mariadb-10 mysql -uroot -prootpass10 qpm_test
 
 # Type your queries
 SELECT * FROM users;
@@ -162,23 +162,23 @@ SELECT * FROM users;
 # Edit test-queries.sql with your queries, then:
 
 # Run on MariaDB 10
-docker exec -i mariadb-10 mysql -uroot -prootpass10 testdb < test-queries.sql
+docker exec -i mariadb-10 mysql -uroot -prootpass10 qpm_test < test-queries.sql
 
 # Run on MariaDB 11
-docker exec -i mariadb-11 mysql -uroot -prootpass11 testdb < test-queries.sql
+docker exec -i mariadb-11 mysql -uroot -prootpass11 qpm_test < test-queries.sql
 
 # Run on MariaDB 12
-docker exec -i mariadb-12 mysql -uroot -prootpass12 testdb < test-queries.sql
+docker exec -i mariadb-12 mysql -uroot -prootpass12 qpm_test < test-queries.sql
 ```
 
 ### Method 3: One-Line Query
 
 ```bash
 # Single query on MariaDB 10
-echo "SELECT VERSION();" | docker exec -i mariadb-10 mysql -uroot -prootpass10 testdb
+echo "SELECT VERSION();" | docker exec -i mariadb-10 mysql -uroot -prootpass10 qpm_test
 
 # Single query on MariaDB 11
-echo "SELECT COUNT(*) FROM users;" | docker exec -i mariadb-11 mysql -uroot -prootpass11 testdb
+echo "SELECT COUNT(*) FROM users;" | docker exec -i mariadb-11 mysql -uroot -prootpass11 qpm_test
 ```
 
 ---
@@ -198,14 +198,14 @@ sleep 15
 docker-compose ps
 
 # 4. Run your query on each version
-echo "SELECT VERSION();" | docker exec -i mariadb-10 mysql -uroot -prootpass10 testdb
-echo "SELECT VERSION();" | docker exec -i mariadb-11 mysql -uroot -prootpass11 testdb
-echo "SELECT VERSION();" | docker exec -i mariadb-12 mysql -uroot -prootpass12 testdb
+echo "SELECT VERSION();" | docker exec -i mariadb-10 mysql -uroot -prootpass10 qpm_test
+echo "SELECT VERSION();" | docker exec -i mariadb-11 mysql -uroot -prootpass11 qpm_test
+echo "SELECT VERSION();" | docker exec -i mariadb-12 mysql -uroot -prootpass12 qpm_test
 
 # 5. Or run a full SQL file on all versions
-docker exec -i mariadb-10 mysql -uroot -prootpass10 testdb < my-query.sql
-docker exec -i mariadb-11 mysql -uroot -prootpass11 testdb < my-query.sql
-docker exec -i mariadb-12 mysql -uroot -prootpass12 testdb < my-query.sql
+docker exec -i mariadb-10 mysql -uroot -prootpass10 qpm_test < my-query.sql
+docker exec -i mariadb-11 mysql -uroot -prootpass11 qpm_test < my-query.sql
+docker exec -i mariadb-12 mysql -uroot -prootpass12 qpm_test < my-query.sql
 ```
 
 ---
@@ -263,9 +263,9 @@ docker-compose restart mariadb-12
 
 | Version | Container Name | Port | Root Password | Database | User     | User Password |
 |---------|---------------|------|---------------|----------|----------|---------------|
-| v10     | mariadb-10    | 3310 | rootpass10    | testdb   | testuser | testpass      |
-| v11     | mariadb-11    | 3311 | rootpass11    | testdb   | testuser | testpass      |
-| v12     | mariadb-12    | 3312 | rootpass12    | testdb   | testuser | testpass      |
+| v10     | mariadb-10    | 3310 | rootpass10    | qpm_test   | testuser | testpass      |
+| v11     | mariadb-11    | 3311 | rootpass11    | qpm_test   | testuser | testpass      |
+| v12     | mariadb-12    | 3312 | rootpass12    | qpm_test   | testuser | testpass      |
 
 ### File Locations
 
@@ -282,12 +282,12 @@ docker-compose restart mariadb-12
 
 2. **Connect with username/password** instead of root:
    ```bash
-   docker exec -it mariadb-10 mysql -utestuser -ptestpass testdb
+   docker exec -it mariadb-10 mysql -utestuser -ptestpass qpm_test
    ```
 
 3. **Run multiple queries at once:**
    ```bash
-   docker exec -i mariadb-10 mysql -uroot -prootpass10 testdb << EOF
+   docker exec -i mariadb-10 mysql -uroot -prootpass10 qpm_test << EOF
    SELECT VERSION();
    SELECT * FROM users;
    CALL GetUserCount();
@@ -296,14 +296,14 @@ docker-compose restart mariadb-12
 
 4. **Export query results to file:**
    ```bash
-   docker exec -i mariadb-10 mysql -uroot -prootpass10 testdb -e "SELECT * FROM users;" > output.txt
+   docker exec -i mariadb-10 mysql -uroot -prootpass10 qpm_test -e "SELECT * FROM users;" > output.txt
    ```
 
 5. **Compare outputs across versions:**
    ```bash
-   docker exec -i mariadb-10 mysql -uroot -prootpass10 testdb -e "SELECT VERSION();" > v10-output.txt
-   docker exec -i mariadb-11 mysql -uroot -prootpass11 testdb -e "SELECT VERSION();" > v11-output.txt
-   docker exec -i mariadb-12 mysql -uroot -prootpass12 testdb -e "SELECT VERSION();" > v12-output.txt
+   docker exec -i mariadb-10 mysql -uroot -prootpass10 qpm_test -e "SELECT VERSION();" > v10-output.txt
+   docker exec -i mariadb-11 mysql -uroot -prootpass11 qpm_test -e "SELECT VERSION();" > v11-output.txt
+   docker exec -i mariadb-12 mysql -uroot -prootpass12 qpm_test -e "SELECT VERSION();" > v12-output.txt
    diff v10-output.txt v11-output.txt
    ```
 

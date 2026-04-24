@@ -337,8 +337,8 @@ qpm-queries/
 
 ### Test Scripts
 ```
-generate-qpm-testdata.sql    - Create test data
-test-qpm-final.sh            - Complete test with blocking
+init-scripts/vX/qpm-testdata.sql  - Auto-creates test data on container boot
+test-qpm-final.sh                 - Complete test with blocking
 create-blocking-session1.sql - Manual blocking test (blocker)
 create-blocking-session2.sql - Manual blocking test (blocked)
 ```

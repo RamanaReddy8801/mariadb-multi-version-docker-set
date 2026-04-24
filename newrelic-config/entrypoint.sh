@@ -19,7 +19,6 @@ integrations:
       PORT: 3306
       USERNAME: ${NEWRELIC_DB_USER}
       PASSWORD: ${NEWRELIC_DB_PASSWORD}
-      DATABASE: testdb
       REMOTE_MONITORING: "true"
       METRICS: "true"
       INVENTORY: "true"
@@ -40,7 +39,6 @@ integrations:
       PORT: 3306
       USERNAME: ${NEWRELIC_DB_USER}
       PASSWORD: ${NEWRELIC_DB_PASSWORD}
-      DATABASE: testdb
       REMOTE_MONITORING: "true"
       METRICS: "true"
       INVENTORY: "true"
@@ -61,7 +59,6 @@ integrations:
       PORT: 3306
       USERNAME: ${NEWRELIC_DB_USER}
       PASSWORD: ${NEWRELIC_DB_PASSWORD}
-      DATABASE: testdb
       REMOTE_MONITORING: "true"
       METRICS: "true"
       INVENTORY: "true"
