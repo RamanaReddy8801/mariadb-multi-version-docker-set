@@ -93,11 +93,6 @@ main() {
         
         print_header "MariaDB $VERSION - Creating Blocking Scenario"
         
-        # Generate test data first
-        print_info "Generating test data..."
-        docker exec -i $CONTAINER $DB_CMD -uroot -p$ROOT_PASS < generate-qpm-testdata.sql > /dev/null 2>&1
-        print_success "Test data generated"
-        
         # Create blocking scenario
         create_blocking_scenario "$CONTAINER" "$DB_CMD" "$ROOT_PASS"
         
