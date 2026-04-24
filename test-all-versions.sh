@@ -40,7 +40,7 @@ test_version() {
     fi
     
     # Run test queries
-    if docker exec -i mariadb-$version $db_command -uroot -p$password testdb < test-queries.sql 2>/dev/null; then
+    if docker exec -i mariadb-$version $db_command -uroot -p$password qpm_test < test-queries.sql 2>/dev/null; then
         echo -e "${GREEN}✓ MariaDB $version: All queries executed successfully${NC}"
     else
         echo -e "${RED}✗ MariaDB $version: Some queries failed${NC}"
@@ -64,11 +64,11 @@ echo "Testing Complete"
 echo "======================================"
 echo ""
 echo "To connect to each version manually:"
-echo "  MariaDB 10: docker exec -it mariadb-10 mysql -uroot -p$MARIADB_10_ROOT_PASSWORD $MARIADB_10_DATABASE"
-echo "  MariaDB 11: docker exec -it mariadb-11 mariadb -uroot -p$MARIADB_11_ROOT_PASSWORD $MARIADB_11_DATABASE"
-echo "  MariaDB 12: docker exec -it mariadb-12 mariadb -uroot -p$MARIADB_12_ROOT_PASSWORD $MARIADB_12_DATABASE"
+echo "  MariaDB 10: docker exec -it mariadb-10 mysql -uroot -p$MARIADB_10_ROOT_PASSWORD qpm_test"
+echo "  MariaDB 11: docker exec -it mariadb-11 mariadb -uroot -p$MARIADB_11_ROOT_PASSWORD qpm_test"
+echo "  MariaDB 12: docker exec -it mariadb-12 mariadb -uroot -p$MARIADB_12_ROOT_PASSWORD qpm_test"
 echo ""
 echo "Or connect from host:"
-echo "  MariaDB 10: mysql -h 127.0.0.1 -P $MARIADB_10_PORT -uroot -p$MARIADB_10_ROOT_PASSWORD $MARIADB_10_DATABASE"
-echo "  MariaDB 11: mariadb -h 127.0.0.1 -P $MARIADB_11_PORT -uroot -p$MARIADB_11_ROOT_PASSWORD $MARIADB_11_DATABASE"
-echo "  MariaDB 12: mariadb -h 127.0.0.1 -P 3312 -uroot -prootpass12 testdb"
+echo "  MariaDB 10: mysql -h 127.0.0.1 -P $MARIADB_10_PORT -uroot -p$MARIADB_10_ROOT_PASSWORD qpm_test"
+echo "  MariaDB 11: mariadb -h 127.0.0.1 -P $MARIADB_11_PORT -uroot -p$MARIADB_11_ROOT_PASSWORD qpm_test"
+echo "  MariaDB 12: mariadb -h 127.0.0.1 -P $MARIADB_12_PORT -uroot -p$MARIADB_12_ROOT_PASSWORD qpm_test"

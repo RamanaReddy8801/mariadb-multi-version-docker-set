@@ -40,8 +40,7 @@ Docker Compose will automatically load variables from `.env` file.
 ### MariaDB 10
 ```bash
 MARIADB_10_ROOT_PASSWORD=rootpass10      # Root password
-MARIADB_10_DATABASE=testdb               # Database name
-MARIADB_10_USER=testuser                 # Non-root user
+MARIADB_10_USER=testuser                 # Non-root user (used by mysql-app)
 MARIADB_10_PASSWORD=testpass             # Non-root password
 MARIADB_10_PORT=3310                     # Host port
 ```
@@ -49,7 +48,6 @@ MARIADB_10_PORT=3310                     # Host port
 ### MariaDB 11
 ```bash
 MARIADB_11_ROOT_PASSWORD=rootpass11
-MARIADB_11_DATABASE=testdb
 MARIADB_11_USER=testuser
 MARIADB_11_PASSWORD=testpass
 MARIADB_11_PORT=3311
@@ -58,7 +56,6 @@ MARIADB_11_PORT=3311
 ### MariaDB 12
 ```bash
 MARIADB_12_ROOT_PASSWORD=rootpass12
-MARIADB_12_DATABASE=testdb
 MARIADB_12_USER=testuser
 MARIADB_12_PASSWORD=testpass
 MARIADB_12_PORT=3312
@@ -121,16 +118,7 @@ MARIADB_11_ROOT_PASSWORD=T5wJ7&hD*sF3nP9^
 MARIADB_12_ROOT_PASSWORD=B4cM6!gQ#yL2xH8%
 ```
 
-### Example 2: Different Database Names
-
-```bash
-# .env
-MARIADB_10_DATABASE=production_db
-MARIADB_11_DATABASE=staging_db
-MARIADB_12_DATABASE=testing_db
-```
-
-### Example 3: Custom Ports
+### Example 2: Custom Ports
 
 ```bash
 # .env
@@ -254,7 +242,6 @@ If `.env` is missing or variables aren't set, these defaults are used:
 | Variable | Default Value |
 |----------|---------------|
 | Root Passwords | `rootpass10`, `rootpass11`, `rootpass12` |
-| Database Names | `testdb` (all versions) |
 | Users | `testuser` (all versions) |
 | User Passwords | `testpass` (all versions) |
 | Ports | `3310`, `3311`, `3312` |
