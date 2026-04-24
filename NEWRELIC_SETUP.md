@@ -106,6 +106,10 @@ No custom Dockerfile needed.
 container startup with three `nri-mysql` entries — one per MariaDB version. Credentials
 are substituted from the container's environment variables at write time.
 
+> **Note:** The `DATABASE` field is intentionally omitted from each entry — the agent
+> monitors all databases on each instance (`qpm_test`, `employees`, etc.) rather than
+> being scoped to a single database.
+
 The host-side reference config lives at:
 ```
 newrelic-config/mysql-config.yml   (all three entries, reference only)

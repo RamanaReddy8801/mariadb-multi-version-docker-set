@@ -44,7 +44,7 @@ All QPM queries have been successfully validated across MariaDB versions 10, 11,
 
 ### Automated Testing
 - **[test-qpm-final.sh](test-qpm-final.sh)** - ⭐ Complete test with blocking scenarios
-- **[generate-qpm-testdata.sql](generate-qpm-testdata.sql)** - Creates comprehensive test data
+- **[init-scripts/v10/qpm-testdata.sql](init-scripts/v10/qpm-testdata.sql)** - Auto-runs on container first boot; creates `qpm_test` database, 5 tables, and ~16,500 rows (v11 and v12 have identical scripts)
 
 ### Manual Blocking Test
 - **[create-blocking-session1.sql](create-blocking-session1.sql)** - Creates blocking transaction (run first)

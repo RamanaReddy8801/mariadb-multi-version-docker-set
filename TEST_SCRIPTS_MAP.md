@@ -9,7 +9,7 @@ This document clarifies which test scripts use which test data and generate whic
 | Test Script | Uses Test Data | Generates Reports | Related Documentation |
 |------------|----------------|-------------------|----------------------|
 | **test-all-versions.sh** | `test-queries.sql` | Console output only | `README.md`, `QUICKSTART.md` |
-| **test-qpm-final.sh** ⭐ | `generate-qpm-testdata.sql` + creates blocking | `qpm-reports/final/mariadb_*_complete_*.md` | `QPM_INDEX.md`, `QPM_QUICK_REFERENCE.md` |
+| **test-qpm-final.sh** ⭐ | `init-scripts/vX/qpm-testdata.sql` (auto-runs on boot) + creates blocking | `qpm-reports/final/mariadb_*_complete_*.md` | `QPM_INDEX.md`, `QPM_QUICK_REFERENCE.md` |
 | **setup-newrelic.sh** | No test data | No reports | `NEWRELIC_SETUP.md`, `NEWRELIC_QUICKREF.md` |
 
 ---
@@ -47,7 +47,7 @@ This document clarifies which test scripts use which test data and generate whic
 **Purpose:** Complete QPM test with artificial blocking scenarios
 
 **Uses:**
-- `generate-qpm-testdata.sql` - Same comprehensive test database
+- `init-scripts/vX/qpm-testdata.sql` - Auto-runs on container first boot; creates `qpm_test` database with 5 tables and ~16,500 rows. No manual data generation needed.
 - **PLUS** Creates artificial blocking sessions in background:
   - Session 1: Starts transaction and holds lock
   - Session 2: Tries to update same row (gets blocked)
@@ -119,22 +119,18 @@ export NEW_RELIC_LICENSE_KEY="your_key_here"
 
 ---
 
-### generate-qpm-testdata.sql
-**Used by:** `test-qpm-final.sh`
+### init-scripts/vX/qpm-testdata.sql
+**Used by:** Docker (auto-runs on container first boot via `/docker-entrypoint-initdb.d`)
 
 **Contains:**
 - Database creation: `qpm_test`
 - Table creation: 5 tables
-- Data insertion: 30,505 total rows
-- Slow query generation: 10+ slow queries executed
-- Full table scans
-- Complex joins
-- Aggregations
-- Updates/Deletes
+- Data insertion: ~16,500 total rows
+- Full table scans, complex joins, aggregations
 
-**Size:** Large (~8 KB, generates 30K+ rows)
+**Size:** Large (generates 16K+ rows)
 
-**Purpose:** Comprehensive QPM testing
+**Purpose:** Comprehensive QPM testing — runs automatically, no manual step needed
 
 **Tables:**
 ```
@@ -144,6 +140,8 @@ products:          500 rows (joins)
 orders:          5,000 rows (complex queries)
 blocking_test:       5 rows (lock testing)
 ```
+
+**Note:** Each version has its own copy: `init-scripts/v10/`, `v11/`, `v12/`. Data is created once on container first start and persists in the named Docker volume. To reset, remove the volume: `docker volume rm mariadb-docker-setup_mariadb_10_data`
 
 ---
 
@@ -348,7 +346,7 @@ qpm-reports/final/mariadb_10_complete_20260422_154526.md
 ```
 test-qpm-final.sh
     ↓
-Uses: generate-qpm-testdata.sql (creates 30K+ rows)
+Uses: init-scripts/vX/qpm-testdata.sql (auto-runs on container boot)
     +
 Creates artificial blocking scenarios
     ↓
@@ -392,7 +390,7 @@ Read: NEWRELIC_SETUP.md, NEWRELIC_QUICKREF.md
 | You Want To... | Run This Script | Use This Data |
 |----------------|-----------------|---------------|
 | Quick check all versions work | `test-all-versions.sh` | `test-queries.sql` |
-| **Test QPM queries** ⭐ | `test-qpm-final.sh` | `generate-qpm-testdata.sql` |
+| **Test QPM queries** ⭐ | `test-qpm-final.sh` | `init-scripts/vX/qpm-testdata.sql` (auto) |
 | Setup New Relic monitoring | `setup-newrelic.sh` | None |
 | Manual blocking test | Run manually | `create-blocking-session*.sql` |
 

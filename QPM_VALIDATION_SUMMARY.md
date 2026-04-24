@@ -227,7 +227,7 @@ Blocking Sessions:
 - `qpm-queries/blocking-sessions.sql` - Blocking session detection
 
 ### Test Scripts
-- `generate-qpm-testdata.sql` - Creates test database and data
+- `init-scripts/vX/qpm-testdata.sql` - Auto-creates test database and data on container first boot
 - `test-qpm-final.sh` - Complete automated test with blocking scenarios
 - `create-blocking-session1.sql` - Manual blocking test (session 1)
 - `create-blocking-session2.sql` - Manual blocking test (session 2)
